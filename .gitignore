@@ -1,0 +1,35 @@
+# ========================
+# PYTHON / BACKEND
+# ========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+backend/venv/
+backend/.env
+backend/*.egg-info/
+.pytest_cache/
+
+# ========================
+# ALEMBIC
+# ========================
+# Giữ lại file migration, chỉ bỏ cache
+backend/alembic/__pycache__/
+backend/alembic/versions/__pycache__/
+
+# ========================
+# FRONTEND
+# ========================
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/out/
+frontend/build/
+
+# ========================
+# EDITOR / OS
+# ========================
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
