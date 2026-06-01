@@ -1,7 +1,5 @@
 # 🗂️ Trello Clone — Real-Time Task Management
 
-**Student:** Tran Manh Hai — Student ID: 23BI14147
-
 ## Tech Stack
 
 - **Backend:** FastAPI, SQLAlchemy, PostgreSQL, JWT Auth
