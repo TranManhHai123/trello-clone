@@ -9,10 +9,18 @@ from app.models.task import Task, TaskStatus
 
 class TaskService:
 
+    def get_task_or_404(self, db: Session, task_id: int, user_id: int) -> Task:
+        """Lấy task và kiểm tra membership — dùng chung cho update, delete, và WS broadcast."""
+        task = task_repo.get_by_id(db, task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        if not project_member_repo.is_member(db, task.project_id, user_id):
+            raise HTTPException(status_code=403, detail="You do not have permission to access this task")
+        return task
+
     def get_tasks(self, db: Session, project_id: int, user_id: int) -> List[Task]:
         if not project_member_repo.is_member(db, project_id, user_id):
             raise HTTPException(status_code=403, detail="You do not have permission to view tasks in this project")
-
         return task_repo.get_by_project(db, project_id)
 
     def create(self, db: Session, project_id: int, user_id: int,
@@ -20,7 +28,6 @@ class TaskService:
                assigned_to: int | None = None) -> Task:
         if not project_member_repo.is_member(db, project_id, user_id):
             raise HTTPException(status_code=403, detail="You do not have permission to add tasks to this project")
-
         return task_repo.create(
             db,
             title=title,
@@ -34,13 +41,8 @@ class TaskService:
                description: str | None = None,
                status: TaskStatus | None = None,
                assigned_to: int | None = None) -> Task:
-        task = task_repo.get_by_id(db, task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
-
-        if not project_member_repo.is_member(db, task.project_id, user_id):
-            raise HTTPException(status_code=403, detail="You do not have permission to edit this task")
-
+        # Tái dụng get_task_or_404 — không cần kiểm tra lại
+        task = self.get_task_or_404(db, task_id, user_id)
         return task_repo.update(
             db, task,
             title=title,
@@ -53,10 +55,8 @@ class TaskService:
         task = task_repo.get_by_id(db, task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-
         if not project_member_repo.is_owner(db, task.project_id, user_id):
             raise HTTPException(status_code=403, detail="You do not have permission to delete this task")
-
         task_repo.delete(db, task)
 
 
