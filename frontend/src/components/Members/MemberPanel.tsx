@@ -47,7 +47,8 @@ export default function MemberPanel({ projectId, currentUserRole }: Props) {
         role: "member",
       });
       setInviteUsername("");
-      setSuccess(`Đã mời "${inviteUsername.trim()}" thành công`);
+      setSuccess(`Successfully invited "${inviteUsername.trim()}"`);
+      setTimeout(() => setSuccess(""), 5000);
       fetchMembers();
     } catch (e: any) {
       setError(
