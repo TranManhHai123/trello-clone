@@ -13,7 +13,7 @@
 - ✅ Kanban Board — drag & drop tasks between 3 columns
 - ✅ RBAC — Owner / Member role-based access control
 - ✅ Assign tasks to project members
-- ⏳ WebSocket Real-time (in progress)
+- ✅ WebSocket Real-time 
 
 ## Getting Started
 
@@ -23,7 +23,7 @@ cd backend
 python -m venv venv
 venv\Scripts\activate      # Windows
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### Frontend
