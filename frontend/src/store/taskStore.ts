@@ -30,7 +30,18 @@ export const useTaskStore = create<TaskStore>((set) => ({
     set((state) => ({
       tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, ...data } : t)),
     })),
-  addTask: (task) => set((state) => ({ tasks: [...state.tasks, task] })),
+  // Idempotent: nếu task đã tồn tại (vd HTTP response add trước, rồi WS broadcast
+  // TASK_CREATED của chính mình đến sau) → update thay vì thêm trùng, tránh duplicate key.
+  addTask: (task) =>
+    set((state) => {
+      const exists = state.tasks.some((t) => t.id === task.id);
+      if (exists) {
+        return {
+          tasks: state.tasks.map((t) => (t.id === task.id ? task : t)),
+        };
+      }
+      return { tasks: [...state.tasks, task] };
+    }),
   removeTask: (taskId) =>
     set((state) => ({ tasks: state.tasks.filter((t) => t.id !== taskId) })),
 }));
