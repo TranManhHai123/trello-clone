@@ -6,12 +6,15 @@ import { Task, useTaskStore } from "@/store/taskStore";
 import { taskAPI, Member } from "@/lib/api";
 import TaskCard from "./TaskCard";
 
+type UserRole = "owner" | "member" | null;
+
 interface Props {
   columnId: string;
   label: string;
   tasks: Task[];
   projectId: number;
   members: Member[];
+  currentUserRole: UserRole;
 }
 
 export default function Column({
@@ -20,7 +23,9 @@ export default function Column({
   tasks,
   projectId,
   members,
+  currentUserRole,
 }: Props) {
+  const isOwner = currentUserRole === "owner";
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [assignedTo, setAssignedTo] = useState<number | null>(null);
@@ -33,7 +38,9 @@ export default function Column({
     try {
       const res = await taskAPI.create(projectId, {
         title: title.trim(),
-        assigned_to: assignedTo,
+        // Member không được chọn assignee — BE tự gán cho chính họ.
+        // Chỉ owner mới thực sự gửi assigned_to lên.
+        assigned_to: isOwner ? assignedTo : null,
       });
       addTask(res.data);
       setTitle("");
@@ -71,7 +78,7 @@ export default function Column({
             className={`flex flex-col gap-2 rounded-lg transition-colors
               ${
                 snapshot.isDraggingOver
-                  ? "bg-blue-50 min-h-[4rem]" // từ file 16: phình ra khi đang kéo
+                  ? "bg-blue-50 min-h-[4rem]"
                   : "min-h-[2rem]"
               }`}
           >
@@ -81,6 +88,7 @@ export default function Column({
                 task={task}
                 index={index}
                 members={members}
+                currentUserRole={currentUserRole}
               />
             ))}
             {provided.placeholder}
@@ -102,21 +110,23 @@ export default function Column({
             className="w-full border-2 border-blue-400 bg-white text-gray-900 rounded-lg p-2 text-sm placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
           />
 
-          {/* Dropdown chọn assignee */}
-          <select
-            value={assignedTo ?? ""}
-            onChange={(e) =>
-              setAssignedTo(e.target.value ? parseInt(e.target.value) : null)
-            }
-            className="w-full border border-gray-300 rounded-lg p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
-          >
-            <option value="">— Unassigned —</option>
-            {members.map((m) => (
-              <option key={m.user_id} value={m.user_id}>
-                @{m.user_username}
-              </option>
-            ))}
-          </select>
+          {/* Dropdown chọn assignee — chỉ owner thấy. Member tạo task sẽ tự động được gán cho chính mình ở BE. */}
+          {isOwner && (
+            <select
+              value={assignedTo ?? ""}
+              onChange={(e) =>
+                setAssignedTo(e.target.value ? parseInt(e.target.value) : null)
+              }
+              className="w-full border border-gray-300 rounded-lg p-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            >
+              <option value="">— Unassigned —</option>
+              {members.map((m) => (
+                <option key={m.user_id} value={m.user_id}>
+                  @{m.user_username}
+                </option>
+              ))}
+            </select>
+          )}
 
           <div className="flex gap-2">
             <button
@@ -130,7 +140,7 @@ export default function Column({
               onClick={() => {
                 setAdding(false);
                 setTitle("");
-                setAssignedTo(null); // reset assignee khi cancel
+                setAssignedTo(null);
               }}
               className="flex-1 bg-gray-200 text-gray-700 text-sm py-1.5 rounded-lg hover:bg-gray-300"
             >

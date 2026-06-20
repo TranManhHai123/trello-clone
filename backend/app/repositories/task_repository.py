@@ -20,10 +20,11 @@ class TaskRepository:
         db.refresh(task)
         return task
 
-    def update(self, db: Session, task: Task, **kwargs) -> Task:
-        nullable_fields = {"assigned_to"}
+    def update(self, db: Session, task: Task, *,
+               provided_fields: set[str] | None = None, **kwargs) -> Task:
+        provided_fields = provided_fields or set()
         for key, value in kwargs.items():
-            if value is not None or key in nullable_fields:
+            if value is not None or key in provided_fields:
                 setattr(task, key, value)
         db.commit()
         db.refresh(task)

@@ -185,7 +185,11 @@ export default function ProjectPage() {
         </div>
       )}
 
-      <KanbanBoard projectId={projectId} members={members} />
+      <KanbanBoard
+        projectId={projectId}
+        members={members}
+        currentUserRole={currentUserRole}
+      />
     </div>
   );
 }

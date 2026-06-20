@@ -28,6 +28,10 @@ class TaskService:
                assigned_to: int | None = None) -> Task:
         if not project_member_repo.is_member(db, project_id, user_id):
             raise HTTPException(status_code=403, detail="You do not have permission to add tasks to this project")
+
+        if not project_member_repo.is_owner(db, project_id, user_id):
+            assigned_to = user_id
+
         return task_repo.create(
             db,
             title=title,
@@ -40,15 +44,20 @@ class TaskService:
                title: str | None = None,
                description: str | None = None,
                status: TaskStatus | None = None,
-               assigned_to: int | None = None) -> Task:
-        # Tái dụng get_task_or_404 — không cần kiểm tra lại
+               assigned_to: int | None = None,
+               assigned_to_provided: bool = False) -> Task:
         task = self.get_task_or_404(db, task_id, user_id)
+
+        if assigned_to_provided and not project_member_repo.is_owner(db, task.project_id, user_id):
+            raise HTTPException(status_code=403, detail="Only project owner can assign tasks")
+
         return task_repo.update(
             db, task,
             title=title,
             description=description,
             status=status,
-            assigned_to=assigned_to
+            assigned_to=assigned_to,
+            provided_fields={"assigned_to"} if assigned_to_provided else set(),
         )
 
     def delete(self, db: Session, task_id: int, user_id: int) -> None:

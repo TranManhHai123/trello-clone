@@ -10,12 +10,19 @@ const COLUMNS = [
   { id: "done", label: "✅ Done" },
 ];
 
+type UserRole = "owner" | "member" | null;
+
 interface Props {
   projectId: number;
   members: Member[];
+  currentUserRole: UserRole;
 }
 
-export default function KanbanBoard({ projectId, members }: Props) {
+export default function KanbanBoard({
+  projectId,
+  members,
+  currentUserRole,
+}: Props) {
   const { tasks, updateTaskStatus } = useTaskStore();
 
   const handleDragEnd = async (result: DropResult) => {
@@ -28,13 +35,11 @@ export default function KanbanBoard({ projectId, members }: Props) {
     const newStatus = destination.droppableId as Task["status"];
     const oldStatus = source.droppableId as Task["status"];
 
-    // Optimistic update — cập nhật UI ngay, không cần chờ API
     updateTaskStatus(taskId, newStatus);
 
     try {
       await taskAPI.update(taskId, { status: newStatus });
     } catch {
-      // Revert nếu API lỗi
       updateTaskStatus(taskId, oldStatus);
       alert("Failed to update task, please try again");
     }
@@ -51,6 +56,7 @@ export default function KanbanBoard({ projectId, members }: Props) {
             tasks={tasks.filter((t) => t.status === col.id)}
             projectId={projectId}
             members={members}
+            currentUserRole={currentUserRole}
           />
         ))}
       </div>

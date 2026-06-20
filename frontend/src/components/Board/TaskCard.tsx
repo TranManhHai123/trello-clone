@@ -5,21 +5,27 @@ import { Trash2, Pencil, Check, X, UserCircle } from "lucide-react";
 import { Task, useTaskStore } from "@/store/taskStore";
 import { taskAPI, Member } from "@/lib/api";
 
+type UserRole = "owner" | "member" | null;
+
 interface Props {
   task: Task;
   index: number;
   members: Member[];
+  currentUserRole: UserRole;
 }
 
-export default function TaskCard({ task, index, members }: Props) {
+export default function TaskCard({
+  task,
+  index,
+  members,
+  currentUserRole,
+}: Props) {
+  const isOwner = currentUserRole === "owner";
   const { removeTask, updateTask } = useTaskStore();
 
-  // Edit title state
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
   const [saving, setSaving] = useState(false);
-
-  // Assign state
   const [showAssign, setShowAssign] = useState(false);
 
   const handleDelete = async (e: React.MouseEvent) => {
@@ -84,9 +90,7 @@ export default function TaskCard({ task, index, members }: Props) {
           className={`bg-white rounded-lg p-3 shadow-sm border border-gray-200 group
             ${snapshot.isDragging ? "shadow-lg rotate-1 border-blue-300" : "hover:shadow-md"}`}
         >
-          {/* Title row */}
           {editing ? (
-            // Edit mode: input + Save/Cancel (từ file 18 — UX rõ hơn onBlur)
             <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
               <input
                 autoFocus
@@ -136,30 +140,38 @@ export default function TaskCard({ task, index, members }: Props) {
             </div>
           )}
 
-          {/* Description — ẩn khi đang edit (từ file 18) */}
           {task.description && !editing && (
             <p className="text-xs text-gray-500 mt-1 line-clamp-2">
               {task.description}
             </p>
           )}
 
-          {/* Assignee badge + dropdown (từ file 19) */}
+          {/* Assignee — owner đổi được qua dropdown, member chỉ xem badge tĩnh */}
           {!editing && (
             <div className="mt-2 relative">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowAssign(!showAssign);
-                }}
-                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
-              >
-                <UserCircle size={13} />
-                {task.assignee_username
-                  ? `@${task.assignee_username}`
-                  : "Assign..."}
-              </button>
+              {isOwner ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowAssign(!showAssign);
+                  }}
+                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+                >
+                  <UserCircle size={13} />
+                  {task.assignee_username
+                    ? `@${task.assignee_username}`
+                    : "Assign..."}
+                </button>
+              ) : (
+                <span className="flex items-center gap-1 text-xs text-gray-500">
+                  <UserCircle size={13} />
+                  {task.assignee_username
+                    ? `@${task.assignee_username}`
+                    : "Unassigned"}
+                </span>
+              )}
 
-              {showAssign && (
+              {isOwner && showAssign && (
                 <div className="absolute z-10 top-6 left-0 bg-white border rounded-lg shadow-lg py-1 min-w-[160px]">
                   <button
                     onClick={() => handleAssign(null, null)}

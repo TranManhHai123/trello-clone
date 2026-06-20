@@ -90,7 +90,8 @@ async def update_task(
     task = task_service.update(
         db, task_id=task_id, user_id=current_user.id,
         title=data.title, description=data.description,
-        status=data.status, assigned_to=data.assigned_to
+        status=data.status, assigned_to=data.assigned_to,
+        assigned_to_provided="assigned_to" in data.model_fields_set,
     )
     response = _build_response(task, db)
 
