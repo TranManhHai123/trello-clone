@@ -13,5 +13,5 @@ class Project(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     owner = relationship("User", back_populates="projects")
-    tasks = relationship("Task", back_populates="project")
+    tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
     members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
