@@ -21,17 +21,17 @@ class ProjectRepository:
         self,
         db: Session,
         project: Project,
-        name: str | None = None,
-        description: str | None = None,
+        *,
+        provided_fields: set[str] | None = None, **kwargs
     ) -> Project:
-        if name is not None:
-            project.name = name
-        if description is not None:
-            project.description = description
+        provided_fields = provided_fields or set()
+        for key, value in kwargs.items():
+            if key in provided_fields:
+                setattr(project, key, value)
         db.commit()
         db.refresh(project)
         return project
-    
+
     def delete(self, db: Session, project: Project):
         db.delete(project)
         db.commit()
