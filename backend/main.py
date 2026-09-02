@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import auth, projects, tasks, members
+from app.api import auth, projects, tasks, members, task_requests
 
 app = FastAPI(title="Trello Clone API", version="1.0.0")
 
@@ -9,6 +9,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://192.168.1.238:3000",
+        "http://10.197.17.227:3000"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -18,6 +19,7 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(members.router)
+app.include_router(task_requests.router)
 
 
 @app.get("/")

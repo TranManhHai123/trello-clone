@@ -1,13 +1,20 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { taskAPI, projectAPI, memberAPI, Member } from "@/lib/api";
+import {
+  taskAPI,
+  projectAPI,
+  memberAPI,
+  taskRequestAPI,
+  Member,
+} from "@/lib/api";
+import RequestPanel from "@/components/Board/RequestPanel";
 import { useAuthStore } from "@/store/authStore";
 import { useTaskStore, Task } from "@/store/taskStore";
 import Navbar from "@/components/Layout/Navbar";
 import KanbanBoard from "@/components/Board/KanbanBoard";
 import MemberPanel from "@/components/Members/MemberPanel";
-import { ArrowLeft, Crown, Users } from "lucide-react";
+import { ArrowLeft, Crown, Users, ClipboardList } from "lucide-react";
 
 interface Project {
   id: number;
@@ -24,16 +31,25 @@ export default function ProjectPage() {
   const projectId = parseInt(id as string);
   const router = useRouter();
   const { user, token } = useAuthStore();
-  const { setTasks, addTask, updateTask, removeTask } = useTaskStore();
+  const {
+    setTasks,
+    addTask,
+    updateTask,
+    removeTask,
+    markTaskPending,
+    revertPendingUpdate,
+    clearPending,
+  } = useTaskStore();
 
   const [project, setProject] = useState<Project | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>(null);
   const [showMembers, setShowMembers] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [showRequests, setShowRequests] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // ── useEffect 1: Load dữ liệu ban đầu (giữ nguyên) ──────────────────────
   useEffect(() => {
     if (!token) {
       router.push("/");
@@ -55,6 +71,20 @@ export default function ProjectPage() {
           const me = membersRes.data.find((m: Member) => m.user_id === user.id);
           setCurrentUserRole(me?.role ?? null);
         }
+        taskRequestAPI.getPending(projectId).then((r) => {
+          setPendingRequests(r.data);
+          r.data.forEach((req: any) => {
+            if (req.task_id) {
+              markTaskPending(
+                req.task_id,
+                req.id,
+                req.action_type,
+                req.payload?.status ?? null,
+                req.requester_id ?? null,
+              );
+            }
+          });
+        });
       })
       .catch((e) => {
         if (e.response?.status === 403) {
@@ -66,20 +96,19 @@ export default function ProjectPage() {
       .finally(() => setLoading(false));
   }, [token, projectId, router, setTasks, user]);
 
-  // ── useEffect 2: WebSocket real-time ─────────────────────────────────────
   useEffect(() => {
     if (!token) return;
 
-    const API_BASE = "http://192.168.1.238:8000";
+    const API_BASE =
+      process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
     const wsBase = API_BASE.replace(/^http/, "ws");
     const wsUrl = `${wsBase}/ws/projects/${projectId}`;
 
     let ws: WebSocket | null = null;
-    let isClosed = false; // flag để tránh tạo lại sau khi đã cleanup
+    let isClosed = false;
 
-    // Delay nhỏ để tránh Strict Mode double-invoke race condition
     const timer = setTimeout(() => {
-      if (isClosed) return; // useEffect đã cleanup trước khi timer chạy
+      if (isClosed) return;
 
       ws = new WebSocket(wsUrl);
 
@@ -96,6 +125,40 @@ export default function ProjectPage() {
             updateTask(data.task.id, data.task as Partial<Task>);
           } else if (data.type === "TASK_DELETED") {
             removeTask(data.task_id as number);
+          } else if (data.type === "REQUEST_CREATED") {
+            setPendingRequests((prev) => [...prev, data.request]);
+            const req = data.request;
+            markTaskPending(
+              req.task_id,
+              req.id,
+              req.action_type,
+              req.payload?.status,
+              req.requester_id,
+            );
+          } else if (data.type === "REQUEST_RESOLVED") {
+            setPendingRequests((prev) =>
+              prev.filter((r) => r.id !== data.request_id),
+            );
+            const t = useTaskStore
+              .getState()
+              .tasks.find((x) => x.id === data.task_id);
+            if (data.status === "rejected" && t?.pending_action === "update") {
+              revertPendingUpdate(data.task_id);
+            } else {
+              clearPending(data.task_id);
+            }
+          } else if (data.type === "REQUEST_CANCELLED") {
+            setPendingRequests((prev) =>
+              prev.filter((r) => r.id !== data.request_id),
+            );
+            const t = useTaskStore
+              .getState()
+              .tasks.find((x) => x.id === data.task_id);
+            if (t?.pending_action === "update") {
+              revertPendingUpdate(data.task_id);
+            } else if (data.task_id) {
+              clearPending(data.task_id);
+            }
           }
         } catch (err) {
           console.error("[WS] Failed to parse message:", err);
@@ -121,7 +184,6 @@ export default function ProjectPage() {
     };
   }, [projectId, token, addTask, updateTask, removeTask]);
 
-  // ── Render ───────────────────────────────────────────────────────────────
   if (loading)
     return (
       <div className="min-h-screen bg-gray-50">
@@ -167,13 +229,25 @@ export default function ProjectPage() {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowMembers(!showMembers)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition
-            ${showMembers ? "bg-blue-100 text-blue-700" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
-        >
-          <Users size={16} /> Members
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowMembers(!showMembers)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition
+      ${showMembers ? "bg-blue-100 text-blue-700" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
+          >
+            <Users size={16} /> Members
+          </button>
+
+          {currentUserRole === "owner" && (
+            <button
+              onClick={() => setShowRequests(!showRequests)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition
+        ${showRequests ? "bg-yellow-100 text-yellow-700" : "bg-gray-200 hover:bg-gray-300 text-gray-700"}`}
+            >
+              <ClipboardList size={16} /> Requests
+            </button>
+          )}
+        </div>
       </div>
 
       {showMembers && (
@@ -181,6 +255,18 @@ export default function ProjectPage() {
           <MemberPanel
             projectId={projectId}
             currentUserRole={currentUserRole}
+          />
+        </div>
+      )}
+
+      {currentUserRole === "owner" && showRequests && (
+        <div className="px-6 pb-3 pt-3">
+          <RequestPanel
+            projectId={projectId}
+            requests={pendingRequests}
+            onResolved={(id) =>
+              setPendingRequests((prev) => prev.filter((r) => r.id !== id))
+            }
           />
         </div>
       )}

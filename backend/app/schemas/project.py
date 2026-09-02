@@ -13,7 +13,7 @@ class ProjectResponse(BaseModel):
     name: str
     description: str | None
     owner_id: int
-    owner_username: str | None = None
+    owner_username: str 
 
     class Config:
         from_attributes = True

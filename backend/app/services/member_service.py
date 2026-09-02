@@ -24,7 +24,6 @@ class MemberService:
                    inviter_id: int, username: str, role: MemberRole):  # username thay vì user_id
         self.check_is_owner(db, project_id, inviter_id)
  
-        # Tìm user theo username
         target_user = user_repo.get_by_username(db, username)
         if not target_user:
             raise HTTPException(status_code=404, detail=f"Không tìm thấy username '{username}'")

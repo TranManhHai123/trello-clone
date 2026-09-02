@@ -1,42 +1,51 @@
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Union
 
-from app.api.deps import get_db, get_current_user
+from app.core.database import get_db
+from app.api.deps import get_current_user
 from app.models.user import User
-from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse
-from app.services.task_service import task_service
+from app.models.task import Task
+from app.models.task_request import TaskRequest, RequestAction
 from app.repositories.user_repository import user_repo
+from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse
+from app.schemas.task_request import TaskRequestResponse
+from app.services.task_service import task_service
 from app.core.websocket_manager import manager
 
 router = APIRouter(tags=["Tasks"])
 
 
-def _build_response(task, db: Session) -> TaskResponse:
-    assignee_username = None
-    if task.assigned_to:
-        assignee = user_repo.get_by_id(db, task.assigned_to)
-        assignee_username = assignee.username if assignee else None
+def _build_task_response(db: Session, task: Task) -> TaskResponse:
+    assignee = user_repo.get_by_id(db, task.assigned_to) if task.assigned_to else None
     return TaskResponse(
-        id=task.id,
-        title=task.title,
-        description=task.description,
-        status=task.status,
-        project_id=task.project_id,
+        id=task.id, title=task.title, description=task.description,
+        status=task.status, project_id=task.project_id,
         assigned_to=task.assigned_to,
-        assignee_username=assignee_username,
+        assignee_username=assignee.username if assignee else None,
     )
 
 
-# ── WebSocket endpoint ──────────────────────────────────────────────────────
+def _build_request_response(db: Session, request: TaskRequest) -> TaskRequestResponse:
+    requester = user_repo.get_by_id(db, request.requester_id)
+
+    if request.task_id:
+        task_title = task_service.get_title(db, request.task_id)
+    else:
+        task_title = (request.payload or {}).get("title")
+
+    return TaskRequestResponse(
+        id=request.id, project_id=request.project_id, task_id=request.task_id,
+        task_title=task_title,
+        requester_id=request.requester_id,
+        requester_username=requester.username if requester else None,
+        action_type=request.action_type, payload=request.payload,
+        status=request.status,
+    )
 
 @router.websocket("/ws/projects/{project_id}")
 async def websocket_endpoint(websocket: WebSocket, project_id: int):
-    """
-    Client kết nối vào đây để nhận real-time update của project.
-    Không cần auth token ở bước này vì WS handshake không tiện gửi header —
-    token có thể truyền qua query param nếu muốn bảo mật thêm sau.
-    """
+
     await manager.connect(websocket, project_id)
     try:
         while True:
@@ -45,79 +54,90 @@ async def websocket_endpoint(websocket: WebSocket, project_id: int):
     except WebSocketDisconnect:
         manager.disconnect(websocket, project_id)
 
-
-# ── HTTP endpoints ──────────────────────────────────────────────────────────
-
 @router.get("/projects/{project_id}/tasks", response_model=List[TaskResponse])
 def get_tasks(
     project_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     tasks = task_service.get_tasks(db, project_id=project_id, user_id=current_user.id)
-    return [_build_response(t, db) for t in tasks]
+    return [_build_task_response(db, t) for t in tasks]
 
 
-@router.post("/projects/{project_id}/tasks", response_model=TaskResponse, status_code=201)
-async def create_task(
-    project_id: int,
-    data: TaskCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    task = task_service.create(
+@router.post("/projects/{project_id}/tasks",
+             response_model=Union[TaskResponse, TaskRequestResponse])
+async def create_task(project_id: int, data: TaskCreate,
+                       db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
+    result = task_service.create(
         db, project_id=project_id, user_id=current_user.id,
-        title=data.title, description=data.description, assigned_to=data.assigned_to
+        title=data.title, description=data.description,
+        assigned_to=data.assigned_to,
     )
-    response = _build_response(task, db)
 
-    # Báo cho tất cả client trong project biết có task mới
+    if isinstance(result, TaskRequest):
+        response = _build_request_response(db, result)
+        await manager.broadcast(project_id, {
+            "type": "REQUEST_CREATED",
+            "request": response.model_dump(mode="json"),
+        })
+        return response
+
+    response = _build_task_response(db, result)
     await manager.broadcast(project_id, {
         "type": "TASK_CREATED",
-        "task": response.model_dump(),
+        "task": response.model_dump(mode="json"),
     })
-
     return response
 
 
-@router.patch("/tasks/{task_id}", response_model=TaskResponse)
-async def update_task(
-    task_id: int,
-    data: TaskUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    task = task_service.update(
+@router.patch("/tasks/{task_id}",
+              response_model=Union[TaskResponse, TaskRequestResponse])
+async def update_task(task_id: int, data: TaskUpdate,
+                       db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
+    result = task_service.update(
         db, task_id=task_id, user_id=current_user.id,
         title=data.title, description=data.description,
         status=data.status, assigned_to=data.assigned_to,
         assigned_to_provided="assigned_to" in data.model_fields_set,
     )
-    response = _build_response(task, db)
 
-    # Broadcast cập nhật — client dùng task.id để tìm và update đúng task
-    await manager.broadcast(task.project_id, {
+    project_id = result.project_id  
+
+    if isinstance(result, TaskRequest):
+        response = _build_request_response(db, result)
+        await manager.broadcast(project_id, {
+            "type": "REQUEST_CREATED",
+            "request": response.model_dump(mode="json"),
+        })
+        return response
+
+    response = _build_task_response(db, result)
+    await manager.broadcast(project_id, {
         "type": "TASK_UPDATED",
-        "task": response.model_dump(),
+        "task": response.model_dump(mode="json"),
     })
-
     return response
 
 
-@router.delete("/tasks/{task_id}", status_code=204)
-async def delete_task(
-    task_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    # Lấy project_id trước khi xóa (sau khi xóa không còn object nữa)
-    task = task_service.get_task_or_404(db, task_id=task_id, user_id=current_user.id)
+@router.delete("/tasks/{task_id}")
+async def delete_task(task_id: int, db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
+    # cần project_id để broadcast — lấy trước khi task có thể bị xoá thật
+    task = task_service.get_task_or_404(db, task_id, current_user.id)
     project_id = task.project_id
 
-    task_service.delete(db, task_id=task_id, user_id=current_user.id)
+    result = task_service.delete(db, task_id=task_id, user_id=current_user.id)
 
-    # Báo cho client xóa task khỏi UI
-    await manager.broadcast(project_id, {
-        "type": "TASK_DELETED",
-        "task_id": task_id,
-    })
+    if isinstance(result, TaskRequest):
+        response = _build_request_response(db, result)
+        await manager.broadcast(project_id, {
+            "type": "REQUEST_CREATED",
+            "request": response.model_dump(mode="json"),
+        })
+        return response
+
+    # result is None -> owner đã xoá thật
+    await manager.broadcast(project_id, {"type": "TASK_DELETED", "task_id": task_id})
+    return {"detail": "Task deleted"}

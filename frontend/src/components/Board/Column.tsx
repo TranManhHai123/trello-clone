@@ -42,7 +42,9 @@ export default function Column({
         // Chỉ owner mới thực sự gửi assigned_to lên.
         assigned_to: isOwner ? assignedTo : null,
       });
-      addTask(res.data);
+      if (!("action_type" in res.data)) {
+        addTask(res.data);
+      }
       setTitle("");
       setAssignedTo(null);
       setAdding(false);

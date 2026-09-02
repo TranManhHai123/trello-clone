@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, ForeignKey, Enum
-from sqlalchemy.orm import relationship
+from sqlalchemy import Integer, ForeignKey, Enum
+from sqlalchemy.orm import relationship, mapped_column
 from app.core.database import Base
 import enum
 
@@ -10,10 +10,10 @@ class MemberRole(str, enum.Enum):
 class ProjectMember(Base):
     __tablename__ = "project_members"
 
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    role = Column(Enum(MemberRole), default=MemberRole.member, nullable=False)
+    id = mapped_column(Integer, primary_key=True, index=True)
+    project_id = mapped_column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    user_id = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role = mapped_column(Enum(MemberRole), default=MemberRole.member, nullable=False)
 
     # Relationships
     project = relationship("Project", back_populates="members")

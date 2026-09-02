@@ -18,9 +18,6 @@ class TaskUpdate(BaseModel):
         if not self.model_fields_set:
             raise ValueError("At least one field must be provided for update")
         return self
-    
-    class Config:
-        from_attributes = True
 
 class TaskResponse(BaseModel):
     id: int

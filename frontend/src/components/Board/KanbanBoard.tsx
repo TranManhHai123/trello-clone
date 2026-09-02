@@ -1,6 +1,7 @@
 "use client";
 import { DragDropContext, DropResult } from "@hello-pangea/dnd";
 import { useTaskStore, Task } from "@/store/taskStore";
+import { useAuthStore } from "@/store/authStore";
 import { taskAPI, Member } from "@/lib/api";
 import Column from "./Column";
 
@@ -23,7 +24,8 @@ export default function KanbanBoard({
   members,
   currentUserRole,
 }: Props) {
-  const { tasks, updateTaskStatus } = useTaskStore();
+  const { tasks, updateTaskStatus, markTaskPending } = useTaskStore();
+  const { user } = useAuthStore();
 
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -32,13 +34,19 @@ export default function KanbanBoard({
     if (destination.droppableId === source.droppableId) return;
 
     const taskId = parseInt(draggableId);
+    const task = tasks.find((t) => t.id === taskId);
+    if (task?.pending_request_id) return;
+
     const newStatus = destination.droppableId as Task["status"];
     const oldStatus = source.droppableId as Task["status"];
 
     updateTaskStatus(taskId, newStatus);
 
     try {
-      await taskAPI.update(taskId, { status: newStatus });
+      const res = await taskAPI.update(taskId, { status: newStatus });
+      if ("action_type" in res.data) {
+        markTaskPending(taskId, res.data.id, "update", oldStatus, user?.id);
+      }
     } catch {
       updateTaskStatus(taskId, oldStatus);
       alert("Failed to update task, please try again");

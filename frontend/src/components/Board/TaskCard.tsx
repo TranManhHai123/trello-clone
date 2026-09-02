@@ -3,7 +3,8 @@ import { useState } from "react";
 import { Draggable } from "@hello-pangea/dnd";
 import { Trash2, Pencil, Check, X, UserCircle } from "lucide-react";
 import { Task, useTaskStore } from "@/store/taskStore";
-import { taskAPI, Member } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
+import { taskAPI, taskRequestAPI, Member } from "@/lib/api";
 
 type UserRole = "owner" | "member" | null;
 
@@ -21,19 +22,31 @@ export default function TaskCard({
   currentUserRole,
 }: Props) {
   const isOwner = currentUserRole === "owner";
-  const { removeTask, updateTask } = useTaskStore();
+  const { user } = useAuthStore();
+  const {
+    removeTask,
+    updateTask,
+    markTaskPending,
+    clearPending,
+    revertPendingUpdate,
+  } = useTaskStore();
 
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
   const [saving, setSaving] = useState(false);
   const [showAssign, setShowAssign] = useState(false);
+  const isRequester = task.pending_requester_id === user?.id;
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Delete this task?")) return;
     try {
-      await taskAPI.delete(task.id);
-      removeTask(task.id);
+      const res = await taskAPI.delete(task.id);
+      if (res.data && "action_type" in res.data) {
+        markTaskPending(task.id, res.data.id, "delete", undefined, user?.id);
+      } else {
+        removeTask(task.id);
+      }
     } catch {
       alert("Failed to delete task");
     }
@@ -52,8 +65,12 @@ export default function TaskCard({
     }
     setSaving(true);
     try {
-      await taskAPI.update(task.id, { title: editTitle.trim() });
-      updateTask(task.id, { title: editTitle.trim() });
+      const res = await taskAPI.update(task.id, { title: editTitle.trim() });
+      if ("action_type" in res.data) {
+        markTaskPending(task.id, res.data.id, "update", undefined, user?.id);
+      } else {
+        updateTask(task.id, { title: editTitle.trim() });
+      }
       setEditing(false);
     } catch {
       alert("Failed to update task");
@@ -80,8 +97,27 @@ export default function TaskCard({
     setShowAssign(false);
   };
 
+  const handleCancelRequest = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!task.pending_request_id) return;
+    try {
+      await taskRequestAPI.cancel(task.project_id, task.pending_request_id);
+      if (task.pending_action === "update") {
+        revertPendingUpdate(task.id);
+      } else {
+        clearPending(task.id);
+      }
+    } catch {
+      alert("Failed to cancel request");
+    }
+  };
+
   return (
-    <Draggable draggableId={String(task.id)} index={index}>
+    <Draggable
+      draggableId={String(task.id)}
+      index={index}
+      isDragDisabled={!!task.pending_request_id}
+    >
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
@@ -126,12 +162,14 @@ export default function TaskCard({
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={handleEditStart}
+                  disabled={!!task.pending_request_id}
                   className="text-gray-400 hover:text-blue-500"
                 >
                   <Pencil size={13} />
                 </button>
                 <button
                   onClick={handleDelete}
+                  disabled={!!task.pending_request_id}
                   className="text-gray-400 hover:text-red-500"
                 >
                   <Trash2 size={13} />
@@ -146,6 +184,23 @@ export default function TaskCard({
             </p>
           )}
 
+          {task.pending_request_id && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-[10px] bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">
+                ⏳ Waiting for approval to{" "}
+                {task.pending_action === "delete" ? "delete" : "update"}
+              </span>
+              {isRequester && (
+                <button
+                  onClick={handleCancelRequest}
+                  className="text-[10px] text-red-500 hover:underline"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Assignee — owner đổi được qua dropdown, member chỉ xem badge tĩnh */}
           {!editing && (
             <div className="mt-2 relative">
@@ -155,6 +210,7 @@ export default function TaskCard({
                     e.stopPropagation();
                     setShowAssign(!showAssign);
                   }}
+                  disabled={!!task.pending_request_id}
                   className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
                 >
                   <UserCircle size={13} />

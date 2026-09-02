@@ -18,7 +18,7 @@ export default function LoginPage() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const { setAuth } = useAuthStore();
+  const { setAuth, setToken } = useAuthStore();
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -29,7 +29,7 @@ export default function LoginPage() {
       const res = await authAPI.login({ email, password });
       const token = res.data.access_token;
 
-      localStorage.setItem("token", token);
+      setToken(token);
       const meRes = await authAPI.me();
       setAuth(meRes.data, token);
       router.push("/dashboard");

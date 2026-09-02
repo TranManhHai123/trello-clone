@@ -10,21 +10,25 @@ interface AuthStore {
   user: User | null;
   token: string | null;
   setAuth: (user: User, token: string) => void;
+  setToken: (token: string) => void;
   logout: () => void;
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
-  // Khôi phục token từ localStorage khi load trang (chỉ client-side)
-  token: typeof window !== 'undefined' ? localStorage.getItem('token') : null,
+  token: typeof window !== 'undefined' ? sessionStorage.getItem('token') : null,
 
   setAuth: (user, token) => {
-    localStorage.setItem('token', token);
+    sessionStorage.setItem('token', token);
     set({ user, token });
+  },
+  setToken: (token) => {
+    sessionStorage.setItem('token', token);
+    set({ token });
   },
 
   logout: () => {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     set({ user: null, token: null });
   },
 }));

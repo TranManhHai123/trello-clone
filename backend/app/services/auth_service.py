@@ -6,7 +6,6 @@ from app.core.security import hash_password, verify_password, create_access_toke
 
 class AuthService:
     def register(self, db: Session, email: str, username: str, password: str):
-        # Kiểm tra email đã tồn tại chưa
         if user_repo.get_by_email(db, email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
