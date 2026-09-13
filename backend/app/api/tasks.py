@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
 from typing import List, Union
+from app.core.security import decode_token
+from app.repositories.project_member_repository import project_member_repo
 
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.task import Task
@@ -44,12 +46,36 @@ def _build_request_response(db: Session, request: TaskRequest) -> TaskRequestRes
     )
 
 @router.websocket("/ws/projects/{project_id}")
-async def websocket_endpoint(websocket: WebSocket, project_id: int):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    project_id: int,
+    token: str | None = Query(default=None),
+):
+    if not token:
+        await websocket.close(code=1008)
+        return
+
+    payload = decode_token(token)
+    if not payload:
+        await websocket.close(code=1008)
+        return
+
+    db = SessionLocal()
+    try:
+        user = user_repo.get_by_id(db, int(payload["sub"]))
+        if not user:
+            await websocket.close(code=1008)
+            return
+
+        if not project_member_repo.is_member(db, project_id, user.id):
+            await websocket.close(code=1008)
+            return
+    finally:
+        db.close()
 
     await manager.connect(websocket, project_id)
     try:
         while True:
-            # Giữ kết nối sống — chờ message từ client (ping/pong hoặc ignore)
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, project_id)
