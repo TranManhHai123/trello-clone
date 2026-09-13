@@ -102,7 +102,7 @@ export default function ProjectPage() {
     const API_BASE =
       process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
     const wsBase = API_BASE.replace(/^http/, "ws");
-    const wsUrl = `${wsBase}/ws/projects/${projectId}`;
+    const wsUrl = `${wsBase}/ws/projects/${projectId}?token=${encodeURIComponent(token ?? "")}`;
 
     let ws: WebSocket | null = null;
     let isClosed = false;
