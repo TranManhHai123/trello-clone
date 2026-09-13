@@ -1,5 +1,9 @@
+import asyncio
+
+
 from fastapi import WebSocket
 from typing import Dict, List
+
 
 class ConnectionManager:
     def __init__(self):
@@ -22,13 +26,16 @@ class ConnectionManager:
     async def broadcast(self, project_id: int, message: dict):
         if project_id not in self.active_connections:
             return
-        dead_connections = []
-        for connection in self.active_connections[project_id]:
-            try:
-                await connection.send_json(message)
-            except Exception:
-                dead_connections.append(connection)
-        for dead in dead_connections:
-            self.disconnect(dead, project_id)
+
+        connections = list(self.active_connections[project_id])
+
+        results = await asyncio.gather(
+            *(connection.send_json(message) for connection in connections),
+            return_exceptions=True
+        )
+
+        for connection, result in zip(connections, results):
+            if isinstance(result, Exception):
+                self.disconnect(connection, project_id)
 
 manager = ConnectionManager()
