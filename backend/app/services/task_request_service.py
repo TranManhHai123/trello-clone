@@ -69,6 +69,8 @@ class TaskRequestService:
         request = task_request_repo.get_by_id(db, request_id)
         if not request or request.project_id != project_id:
             raise HTTPException(status_code=404, detail="Request not found")
+        if not project_member_repo.is_member(db, project_id, user_id):
+            raise HTTPException(status_code=403, detail="You are no longer a member of this project")
         if request.requester_id != user_id:
             raise HTTPException(status_code=403, detail="You can only cancel your own request")
         if request.status != RequestStatus.pending:
