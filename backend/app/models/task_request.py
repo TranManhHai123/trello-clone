@@ -19,7 +19,7 @@ class TaskRequest(Base):
 
     id = mapped_column(Integer, primary_key=True, index=True)
     project_id = mapped_column(Integer, ForeignKey("projects.id"), nullable=False)
-    task_id = mapped_column(Integer, ForeignKey("tasks.id"), nullable=True)  
+    task_id = mapped_column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)  
     requester_id = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     action_type = mapped_column(Enum(RequestAction), nullable=False)
     payload = mapped_column(JSON, nullable=True)  # dữ liệu cần khi approve (title, status mới...)
